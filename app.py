@@ -24,7 +24,7 @@ class soundbase:
     filepath:str = None
     playing:bool = False
     
-class AVSimManager(QMainWindow):
+class AVSimMixer(QMainWindow):
     def __init__(self, broker_ip:str):
         super().__init__()
         loadUi(APP_UI, self)
@@ -116,7 +116,7 @@ if __name__ =="__main__":
     mixer.init()
         
     app = QApplication(sys.argv)
-    window = AVSimManager(broker_ip=broker_address)
+    window = AVSimMixer(broker_ip=broker_address)
     window.show()
     sys.exit(app.exec())
         
