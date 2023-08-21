@@ -28,6 +28,8 @@ class AVSimMixer(QMainWindow):
     def __init__(self, broker_ip:str):
         super().__init__()
         loadUi(APP_UI, self)
+
+        self._resource_files = [f for f in RESOURCE_PATH.iterdir() if f.is_file()]
         
         # mapi interface function (subscribe the mapi)
         self.message_api = {
