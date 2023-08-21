@@ -30,25 +30,31 @@ class AVSimMixer(QMainWindow):
         loadUi(APP_UI, self)
 
         self._resource_files = [f for f in RESOURCE_PATH.iterdir() if f.is_file()]
+        self._resource_sound = {}
+
+        interior_sound = mixer.Sound("./sound/interior_ambience_10min.mp3")
         
         # mapi interface function (subscribe the mapi)
         self.message_api = {
             "flame/avsim/mapi_notify_active" : self.mapi_notify_active,
             "flame/avsim/mapi_nofity_status" : self.mapi_notify_status
         }
-        self.resource_table_columns = ["Filename"]
+        self.resource_table_columns = ["Sound Resources"]
         
         # callback function connection for menu
         self.btn_play.clicked.connect(self.on_click_play)   # play selected sound file
         self.btn_stop.clicked.connect(self.on_click_stop)   # pause selected sound file
         self.btn_pause.clicked.connect(self.on_click_pause) # pause selected sound file
         self.btn_resume.clicked.connect(self.on_click_resume)  # resume selected sound file
+        self.table_sound_files.doubleClicked.connect(self.on_dbclick_select) # play selected sound file
         
          # sound resournce
         self.resource_model = QStandardItemModel()
         self.resource_model.setColumnCount(len(self.resource_table_columns))
         self.resource_model.setHorizontalHeaderLabels(self.resource_table_columns)
         self.table_sound_files.setModel(self.resource_model)
+
+        self.load_resource()
         
         # for mqtt connection
         self.mq_client = mqtt.Client(client_id="flame-avsim-mixer", transport='tcp', protocol=mqtt.MQTTv311, clean_session=True)
@@ -57,11 +63,43 @@ class AVSimMixer(QMainWindow):
         self.mq_client.on_disconnect = self.on_mqtt_disconnect
         self.mq_client.connect_async(broker_ip, port=1883, keepalive=60)
         self.mq_client.loop_start()
+
+    def mapi_notify_active(self):
+        pass
+
+    def mapi_notify_status(self):
+        pass
+
+    def on_click_play(self):
+        pass
+
+    def on_click_stop(self):
+        pass
+
+    def on_click_pause(self):
+        pass
+
+    def on_click_resume(self):
+        pass
+
+    def on_dbclick_select(self):
+        row = self.table_sound_files.currentIndex().row()
+        column = self.table_sound_files.currentIndex().column()
+
+        if self._resource_files[row].name in self._resource_sound.keys():
+            self._resource_sound[self._resource_files[row].name].play()
+            #print(self._resource_sound[str(self._resource_files[row])])
+        
         
     def load_resource(self):
         self.resource_model.setRowCount(0)
-        #self.resource_model.appendRow([QStandardItem(str(data["time"])), QStandardItem(event["mapi"]), QStandardItem(event["message"])])
-    
+        for resource in self._resource_files:
+            self.resource_model.appendRow([QStandardItem(str(resource.name))])
+            self._resource_sound[resource.name] = mixer.Sound(str(resource))
+            print(type(resource.name))
+        self.table_sound_files.resizeColumnsToContents()
+        print(self._resource_sound)
+        
     # change row background color
     def _mark_row_color(self, row):
         for col in range(self.resource_model.columnCount()):
