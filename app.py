@@ -1,6 +1,7 @@
 
 import sys, os
 from pygame import mixer
+import pygame
 from dataclasses import dataclass
 import time
 import argparse
@@ -12,17 +13,23 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QTableView, QLabel, QPush
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import QModelIndex, QObject, Qt, QTimer, QThread, pyqtSignal, QAbstractTableModel
+from pyflame_avsim_mixer import mapi_mixer
 
 WORKING_PATH = pathlib.Path(__file__).parent # working path
 APP_UI = WORKING_PATH / "MainWindow.ui" # Qt-based UI file
 RESOURCE_PATH = WORKING_PATH / pathlib.Path("sound")
 APP_NAME = "avsim-mixer" # application name
 
-@dataclass
-class soundbase:
-    sound:object = None
-    filepath:str = None
-    playing:bool = False
+# class MixerState(QTimer):
+#     def __init__(self, interval_ms):
+#         self.time_interval = interval_ms # default interval_ms = 100ms
+#         self.setInterval(interval_ms)
+#         self.timeout.connect(self.on_timeout_callback) # timer callback
+
+#     def on_timeout_callback(self):
+#         pygame.display.update()
+#         print("update")
+            
     
 class AVSimMixer(QMainWindow):
     def __init__(self, broker_ip:str):
@@ -31,14 +38,17 @@ class AVSimMixer(QMainWindow):
 
         self._resource_files = [f for f in RESOURCE_PATH.iterdir() if f.is_file()]
         self._resource_sound = {}
-
-        interior_sound = mixer.Sound("./sound/interior_ambience_10min.mp3")
         
         # mapi interface function (subscribe the mapi)
         self.message_api = {
-            "flame/avsim/mapi_notify_active" : self.mapi_notify_active,
-            "flame/avsim/mapi_nofity_status" : self.mapi_notify_status
+            "flame/avsim/mixer/mapi_play" : self.mapi_play,
+            "flame/avsim/mixer/mapi_stop" : self.mapi_stop,
+            "flame/avsim/mixer/mapi_fadeout" : self.mapi_fadeout,
+            "flame/avsim/mixer/mapi_set_volume" : self.mapi_set_volume,
+            "flame/avsim/mapi_request_active" : self.mapi_request_active,
+            "flame/avsim/carla/notify_alert_collision" : self._api_notify_alert_collision
         }
+
         self.resource_table_columns = ["Sound Resources"]
         
         # callback function connection for menu
@@ -64,11 +74,68 @@ class AVSimMixer(QMainWindow):
         self.mq_client.connect_async(broker_ip, port=1883, keepalive=60)
         self.mq_client.loop_start()
 
+    '''
+     Message Interface Functions
+    '''
     def mapi_notify_active(self):
         pass
 
     def mapi_notify_status(self):
         pass
+
+    def mapi_request_active(self):
+        if self.mq_client.is_connected():
+            msg = {'app':APP_NAME}
+            self.mq_client.publish("flame/avsim/mapi_request_active", json.dumps(msg), 0)
+
+    # Sound Play
+    def mapi_play(self, payload:dict):
+        if "file" in payload.keys():
+            sound_file = payload["file"]
+            if "volume" in payload.keys():
+                volume = float(payload["volume"])
+            else:
+                volume = 1.0
+
+            if sound_file in self._resource_sound.keys():
+                self.sound_play(sound_file, volume)
+
+    # Sound Playing Stop
+    def mapi_stop(self, payload):
+        if "file" in payload.keys():
+            sound_file = payload["file"]
+
+            if sound_file in self._resource_sound.keys():
+                self._resource_sound[sound_file].stop()
+
+    def mapi_fadeout(self, payload):
+        print("Not support yet")
+        return
+    
+        if "file" in payload.keys():
+            sound_file = payload["file"]
+            if "fadeout_time" in payload.keys():
+                self._resource_sound[sound_file].fadeout(int(payload["fadeout_time"]))
+
+        
+
+    # change sound volume
+    def mapi_set_volume(self, payload):
+        if "file" in payload.keys():
+            sound_file = payload["file"]
+            if "volume" in payload.keys():
+                volume = float(payload["volume"])
+                if sound_file in self._resource_sound.keys():
+                    self._resource_sound[sound_file].set_volume(volume)
+        
+
+    def _api_notify_alert_collision(self, payload:dict):
+        if type(payload) != dict:
+            print("pyload must be type of dict")
+            return
+        
+        alert_sound = "collision_alert_1.mp3"
+        self.sound_play(alert_sound)
 
     def on_click_play(self):
         pass
@@ -82,13 +149,22 @@ class AVSimMixer(QMainWindow):
     def on_click_resume(self):
         pass
 
+    def sound_play(self, filename:str, volume:float=1.0):
+        if filename in self._resource_sound.keys():
+            print(type(self._resource_sound[filename]))
+            self._resource_sound[filename].set_volume(volume)
+            self._resource_sound[filename].play()
+            row_index = self.resource_model.findItems(filename, Qt.MatchFlag.MatchExactly, 0)[0].row()
+
+
     def on_dbclick_select(self):
         row = self.table_sound_files.currentIndex().row()
-        column = self.table_sound_files.currentIndex().column()
+        col = self.table_sound_files.currentIndex().column()
 
         if self._resource_files[row].name in self._resource_sound.keys():
             self._resource_sound[self._resource_files[row].name].play()
-            #print(self._resource_sound[str(self._resource_files[row])])
+            self.resource_model.item(row,col).setBackground(QColor(255,0,0,100))
+            self.sound_play(self._resource_files[row].name)
         
         
     def load_resource(self):
@@ -96,9 +172,7 @@ class AVSimMixer(QMainWindow):
         for resource in self._resource_files:
             self.resource_model.appendRow([QStandardItem(str(resource.name))])
             self._resource_sound[resource.name] = mixer.Sound(str(resource))
-            print(type(resource.name))
         self.table_sound_files.resizeColumnsToContents()
-        print(self._resource_sound)
         
     # change row background color
     def _mark_row_color(self, row):
@@ -111,6 +185,9 @@ class AVSimMixer(QMainWindow):
             for row in range(self.resource_model.rowCount()):
                 self.resource_model.item(row,col).setBackground(QColor(0,0,0,0))
                 
+    def show_on_statusbar(self, text):
+        self.statusBar().showMessage(text)
+
     # MQTT callbacks
     def on_mqtt_connect(self, mqttc, obj, flags, rc):
         # subscribe message api
@@ -118,9 +195,6 @@ class AVSimMixer(QMainWindow):
             self.mq_client.subscribe(topic, 0)
         
         self.show_on_statusbar("Connected to Broker({})".format(str(rc)))
-        
-    def show_on_statusbar(self, text):
-        self.statusBar().showMessage(text)
         
     def on_mqtt_disconnect(self, mqttc, userdata, rc):
         self.show_on_statusbar("Disconnected to Broker({})".format(str(rc)))
@@ -160,22 +234,4 @@ if __name__ =="__main__":
     window.show()
     sys.exit(app.exec())
         
-    
-    
-    #a = soundbase(sound = mixer.Sound("./sound/interior_ambience_10min.mp3"), filepath="./sound/interior_ambience_10min.mp3", playing=False)
-    
-    mixer.init()
-    #a.sound.play()
-    
-    interior_sound = mixer.Sound("./sound/interior_ambience_10min.mp3")
-    
-    # tesla_error = mixer.Sound("./sound/tesla_error.mp3")
-    # interior_sound.set_volume(0.7)
-    # tesla_error.set_volume(0.3)
-    # interior_sound.play()
-    
-    wait = 0
-    while True:
-        time.sleep(1)
-        wait = wait +1
         
