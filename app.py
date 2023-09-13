@@ -17,20 +17,12 @@ from pyflame_avsim_mixer import mapi_mixer
 
 WORKING_PATH = pathlib.Path(__file__).parent # working path
 APP_UI = WORKING_PATH / "MainWindow.ui" # Qt-based UI file
-RESOURCE_PATH = WORKING_PATH / pathlib.Path("sound")
+RESOURCE_PATH = WORKING_PATH / pathlib.Path("resource")
 APP_NAME = "avsim-mixer" # application name
 
-# class MixerState(QTimer):
-#     def __init__(self, interval_ms):
-#         self.time_interval = interval_ms # default interval_ms = 100ms
-#         self.setInterval(interval_ms)
-#         self.timeout.connect(self.on_timeout_callback) # timer callback
-
-#     def on_timeout_callback(self):
-#         pygame.display.update()
-#         print("update")
-            
-    
+'''
+Sound Mixer Class
+'''    
 class AVSimMixer(QMainWindow):
     def __init__(self, broker_ip:str):
         super().__init__()
